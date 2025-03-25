@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wasm Demo</title>
+    <style>
+        #drop-zone {
+            width: 300px;
+            height: 200px;
+            border: 2px dashed #007bff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            margin: 20px auto;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="color: blueviolet;">VANDSTAND I NÆSTVED, DU KAN SE VAND STANDEN HVIS DU BLIVER VERIFIED</h1>
+
+
+
+
+
+    <H2>2 . 9 METER</H2>
+    <!-- ✅ Drag & Drop Feature
+    <h2>Drag & Drop File Upload</h2>
+    <div id="drop-zone">Drag a file here</div>
+    
+    <div id="output"></div> -->
+
+    <script type="module">
+        import init, { add, setup_drag_and_drop } from "./pkg/faceid.js";
+
+        async function runWasm() {
+            await init();
+            console.log("Wasm loaded successfully!");
+
+
+
+
+
+
+
+
+
+
+
+            // // Addition Feature
+            // document.getElementById("calculateBtn").addEventListener("click", () => {
+            //     const num1 = parseInt(document.getElementById("num1").value, 10);
+            //     const num2 = parseInt(document.getElementById("num2").value, 10);
+            //     console.log(`Calling add(${num1}, ${num2})`);
+            //     document.getElementById("result").textContent = add(num1, num2);
+            // });
+
+            // // Drag & Drop Feature
+            // setup_drag_and_drop("drop-zone", "output");
+        }
+
+        runWasm().catch(console.error);
+    </script>
+</body>
+</html>
