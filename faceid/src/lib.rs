@@ -6,6 +6,13 @@ use std::cell::RefCell;
 use std::result;
 use web_sys::{FileReader, HtmlElement, Event, DragEvent};
 
+#[wasm_bindgen]
+pub fn verify() {
+    // mangler 
+}
+
+
+
 
 #[wasm_bindgen]
 pub fn add(a: i32, b: i32) -> i32 {
