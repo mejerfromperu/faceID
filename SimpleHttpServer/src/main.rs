@@ -18,7 +18,7 @@ struct AppState {
     measurements: Vec<WaterReading>,
     guid: String,
 }
-#[allow(dead_code)]
+#[allow(dead_code)] // Warning ignored about debug
 #[derive(Debug)]
 struct WaterReading {
     height: u16,
@@ -29,17 +29,17 @@ struct WaterReading {
 #[get("/")]
 async fn hello(data: web::Data<AppState>) -> impl Responder {
     match data.may_access.load(SeqCst) {
-        true => { // Hvis der er blevet sendt en valid POST-request på /echo vil denne være valid for første bruger.
+        true => { // If valid POST-request has been sent before this one,
             let _ = data.may_access.store(false, SeqCst);
 
             HttpResponse::Ok().body(format!("{:?}", &data.measurements)) // Using debug-mode here since vec! does not work with default Display
 
         }
-        false => { // Der vil være en counter, som tæller op hver gang en klient forsøger at trænge ind på siden, selvom de ikke har fået ansigtsgodkendelse.
+        false => { // If client does not have permission, counter is increased.
             data.num.fetch_add(1, SeqCst);
             println!("{}", &data.num.load(SeqCst));
 
-            HttpResponse::Ok().body(format!("Du er nu blevet afvist {} gange", &data.num.load(SeqCst)))
+            HttpResponse::Ok().body(format!("You have now been blocked {} times", &data.num.load(SeqCst)))
         }
     }
 }
@@ -47,7 +47,7 @@ async fn hello(data: web::Data<AppState>) -> impl Responder {
 #[post("/echo")]
 async fn echo(req_body: String, data: web::Data<AppState>) -> impl Responder {
 
-    if req_body.eq(&data.guid) { // Eget genererede GUID - bør måske genereres dynamisk for faktisk at være safe.
+    if req_body.eq(&data.guid) { // Own generated UUID
         data.may_access.store(true, SeqCst);
         return HttpResponse::Ok().body("You may now enter");
     }
