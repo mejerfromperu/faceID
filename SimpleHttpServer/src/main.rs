@@ -1,38 +1,42 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use futures::executor::block_on;
 use rand::Rng;
 use serial::SerialPort;
-use std::future::Future;
 use std::io::Read;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::{AtomicBool, AtomicI32};
 use std::thread::sleep;
 use std::time::Duration;
 use std::{io, thread};
+use reqwest::{Error, blocking::Response};
+use serial_windows::COMPort;
+use uuid::{Uuid};
+
 
 struct AppState {
     num: AtomicI32,
     may_access: AtomicBool,
     measurements: Vec<WaterReading>,
+    guid: String,
 }
-
+#[allow(dead_code)]
 #[derive(Debug)]
 struct WaterReading {
     height: u16,
     temperature: i8,
 }
 
-#[get("/")]
-async fn hello(mut data: web::Data<AppState>) -> impl Responder {
-    match &data.may_access.load(SeqCst) {
-        true => {
-            &data.may_access.store(false, SeqCst);
 
-            HttpResponse::Ok().body(format!("{:?}", &data.measurements))
+#[get("/")]
+async fn hello(data: web::Data<AppState>) -> impl Responder {
+    match data.may_access.load(SeqCst) {
+        true => { // Hvis der er blevet sendt en valid POST-request på /echo vil denne være valid for første bruger.
+            let _ = data.may_access.store(false, SeqCst);
+
+            HttpResponse::Ok().body(format!("{:?}", &data.measurements)) // Using debug-mode here since vec! does not work with default Display
 
         }
-        false => {
-            &data.num.fetch_add(1, SeqCst);
+        false => { // Der vil være en counter, som tæller op hver gang en klient forsøger at trænge ind på siden, selvom de ikke har fået ansigtsgodkendelse.
+            data.num.fetch_add(1, SeqCst);
             println!("{}", &data.num.load(SeqCst));
 
             HttpResponse::Ok().body(format!("Du er nu blevet afvist {} gange", &data.num.load(SeqCst)))
@@ -41,26 +45,35 @@ async fn hello(mut data: web::Data<AppState>) -> impl Responder {
 }
 
 #[post("/echo")]
-async fn echo(req_body: String, mut data: web::Data<AppState>) -> impl Responder {
+async fn echo(req_body: String, data: web::Data<AppState>) -> impl Responder {
 
-    if req_body == "7fb0d68c-52af-4972-914a-fdeaebe1dcba" {
-        &data.may_access.store(true, SeqCst);
+    if req_body.eq(&data.guid) { // Eget genererede GUID - bør måske genereres dynamisk for faktisk at være safe.
+        data.may_access.store(true, SeqCst);
         return HttpResponse::Ok().body("You may now enter");
     }
     HttpResponse::NotAcceptable()
         .body("You may now leave, you know not the proper GUID, you insecure fraudster")
 }
 
-async fn manual_hello() -> impl Responder {
-    HttpResponse::Ok().body("Hey there!")
-}
+
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    thread::spawn(|| {
+async fn main() -> io::Result<()> {
+
+    let guid = Uuid::new_v4();
+    let guid_clone = guid.clone();
+
+    thread::spawn(move || {
         sleep(Duration::from_secs(2));
-        let mut port = serial_windows::COMPort::open("COM4").unwrap();
-        interact(&mut port).unwrap();
+        let mut port :COMPort = match serial_windows::COMPort::open("COM4") {
+            Ok(c) => c,
+            Err(e) => {
+                panic!("couldn't open COM4: {:?}", e);
+            }
+        };
+
+        setup(&mut port);
+
 
         let mut buf;
 
@@ -69,22 +82,23 @@ async fn main() -> std::io::Result<()> {
         loop {
             i = 0_usize;
             buf = [0_u8; 32];
-            port.read(&mut buf).unwrap();
+            let _ = &port.read(&mut buf);
             let client = reqwest::blocking::Client::new();
-            let mut req;
             loop {
                 println!("{}", buf[i] as char);
                 println!("{}", buf[i]);
                 if i < 31 {
                     i += 1;
                 } else {
-                    if buf.contains(&98) {
-                        req = client
+                    if buf.contains(&98) { // This is supposed to represent a valid character, in this case 'b'
+                        let req :Result<Response, Error> = client
                             .post("http://127.0.0.1:8080/echo")
-                            .body("7fb0d68c-52af-4972-914a-fdeaebe1dcba")
-                            .send()
-                            .unwrap();
-                        println!("{:?}", req.text().unwrap());
+                            .body(guid_clone.to_string())
+                            .send();
+                        match req {
+                            Ok(_) => {},
+                            Err(_) => {println!("Something went wrong while trying to send request, perhaps server is not yet open.")},
+                        }
                     }
 
                     break;
@@ -110,6 +124,7 @@ async fn main() -> std::io::Result<()> {
         num: AtomicI32::new(4),
         may_access: AtomicBool::new(false),
         measurements: readings,
+        guid: guid.to_string(),
     });
 
     HttpServer::new(move || {
@@ -117,25 +132,33 @@ async fn main() -> std::io::Result<()> {
             .app_data(appdata.clone())
             .service(hello)
             .service(echo)
-            .route("/hey", web::get().to(manual_hello))
     })
     .bind(("127.0.0.1", 8080))?
     .run()
     .await
 }
 
-fn interact<T: SerialPort>(port: &mut T) -> io::Result<()> {
-    port.reconfigure(&|settings| {
-        settings.set_baud_rate(serial::Baud38400)?;
+fn setup<T: SerialPort>(port: &mut T) {
+    let config_attempt = port.reconfigure(&|settings| {
+        match settings.set_baud_rate(serial::Baud38400) {
+            Err(_) => {println!("Failed to set baudrate, application exiting");},
+            _ => {}
+        }
         settings.set_char_size(serial::Bits8);
         settings.set_parity(serial::ParityNone);
         settings.set_stop_bits(serial::Stop2);
         settings.set_flow_control(serial::FlowNone);
-
         Ok(())
-    })?;
 
-    port.set_timeout(Duration::from_millis(3000))?;
+    });
+    match config_attempt {
+        Err(_) => {panic!("Something went wrong while trying to setup serial port, application exiting");},
+        _ => {}
+    }
 
-    Ok(())
+
+    match port.set_timeout(Duration::from_millis(3000)) {
+        Err(_) => {panic!("Something went wrong while trying to interact with serial port, application exiting");}
+        _ => {}
+    }
 }
