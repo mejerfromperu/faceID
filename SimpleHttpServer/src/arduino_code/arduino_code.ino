@@ -3,6 +3,8 @@
 
 HUSKYLENS huskylens;
 
+// This code expects Huskylens to be connected using I2C-protocol
+
 void printResult(HUSKYLENSResult result);
 
 void setup() {
@@ -19,11 +21,10 @@ void setup() {
 
 void loop() {
     if (!huskylens.request()) Serial.println(F("Fail to request data from HUSKYLENS, recheck the connection!"));
-    else if(!huskylens.isLearned()) Serial.println(F("Nothing learned, press learn button on HUSKYLENS to learn one!"));
-    else if(!huskylens.available()) Serial.println(F("No block or arrow appears on the screen!"));
+    else if(!huskylens.available()) Serial.print(F("a"));
     else
     {
-        Serial.println(F("###########"));
+        
         while (huskylens.available())
         {
             HUSKYLENSResult result = huskylens.read();
@@ -33,5 +34,5 @@ void loop() {
 }
 
 void printResult(HUSKYLENSResult result){
-    Serial.print(result.ID == 1 || result.ID == 2 ? 'b' : 'a')
+    Serial.print(result.ID == 1 || result.ID == 2 ? 'b' : 'a');
 }
