@@ -1,7 +1,9 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use rand::Rng;
 use reqwest::{blocking::Response, Error};
-use serial::{SerialPort, SystemPort};
+use serial::core::SerialDevice;
+use serial::windows::COMSettings;
+use serial::{SerialPort, SerialPortSettings, SystemPort};
 use std::io::Read;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::{AtomicBool, AtomicI32};
@@ -167,4 +169,54 @@ fn setup<T: SerialPort>(port: &mut T) {
         }
         _ => {}
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::setup;
+    use serial::core::SerialDevice;
+    use serial::windows::COMSettings;
+    use serial::{Baud38400, SerialPortSettings, SystemPort};
+    use serial_test::serial;
+    use std::time::Duration;
+
+    #[test]
+    #[serial]
+    fn it_works() {
+
+        let mut port: SystemPort = match serial::open("COM4") {
+            Ok(c) => c,
+            Err(e) => {
+                panic!("couldn't open COM4, perhaps busy in Arduino IDE: {:?}", e);
+            }
+        };
+        let settings :COMSettings = port.read_settings().expect("man");
+
+
+        setup(&mut port);
+        assert_eq!(Baud38400, settings.baud_rate().unwrap());
+
+    }
+
+    #[test]
+    #[serial]
+    fn constructor_works() {
+
+        let mut port = serial::open("COM4");
+
+        assert!(true, "{}", port.is_ok());
+    }
+
+    #[test]
+    #[serial]
+    fn set_timeout_works() {
+
+        let mut port = serial::open("COM4").unwrap();
+        setup(&mut port);
+        let settings :COMSettings = port.read_settings().unwrap();
+        assert_eq!(port.timeout(), Duration::from_millis(3000));
+
+    }
+
+
 }
